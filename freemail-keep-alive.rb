@@ -3,7 +3,6 @@
 
 # installation:
 # gem install mail (for mail)
-# #gem install nokogiri
 # gem install httpclient (for proper https)
 
 
