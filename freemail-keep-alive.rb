@@ -1,3 +1,6 @@
+# encoding: utf-8
+# The above line is important for Ruby to properly read in the file (otherwise, some encoding errors arise).
+
 # http://www.rubydoc.info/gems/mail/frames
 # https://github.com/mikel/mail
 
@@ -24,14 +27,28 @@ def lookupService(service)
 
   xml = File.open(filename).read
   xmldoc = REXML::Document.new xml
+  popHostname = ""
+  popPort = ""
   xmldoc.elements.each("/clientConfig/emailProvider/incomingServer[@type='pop3' and socketType/text() = 'SSL']") do |incomingServer|
-  popHostname = incomingServer.get_elements("hostname").first.text
-  popPort = incomingServer.get_elements("port").first.text
+    popHostname = incomingServer.get_elements("hostname").first.text
+    popPort = incomingServer.get_elements("port").first.text
+    break
+  end
+
+  smtpHostname = ""
+  smtpPort = ""
+  xmldoc.elements.each("/clientConfig/emailProvider/outgoingServer[@type='smtp' and socketType/text() = 'STARTTLS']") do |outgoingServer|
+    smtpHostname = outgoingServer.get_elements("hostname").first.text
+    smtpPort = outgoingServer.get_elements("port").first.text
+    break
+  end
+
   return {
     "popHostname" => popHostname,
-    "popPort" => popPort
+    "popPort" => popPort,
+    "smtpHostname" => smtpHostname,
+    "smtpPort" => smtpPort
   }
-  end
 end
 
 
@@ -43,6 +60,13 @@ if mainVersion.to_i < 2 and subVersion.to_i < 9 then
   puts "ruby version is too old (expected 1.9, found #{RUBY_VERSION}); Wrong ruby interpreter used?"
   exit
 end
+
+if ARGV.size != 1 or ARGV.first[/\w+@\w+\.\w+/].nil? then
+  puts "no email address provided to forward found emails to"
+  exit
+end
+
+finalEmailAddress = ARGV.first
 
 require 'mail'
 require 'csv'
@@ -72,13 +96,28 @@ CSV.read("configuration/accounts.tsv", {:col_sep => "\t"})[1..-1].each do |row|
       :user_name  => email,
       :password   => password,
       :enable_ssl => true
+
+    delivery_method :smtp,
+      :address    => settings["smtpHostname"],
+      :port       => settings["smtpPort"],
+      :user_name  => email,
+      :password   => password,
+      :enable_ssl => true
   end
-  
+
+
   puts "Logging into the email account of ""#{email}""…"
   mails = Mail.all
-  
-  puts "…finding #{mails.length} emails in total."
+  numberOfEmails = mails.size
+  puts "…finding #{mails.size} emails in total."
 
+  mails.each_with_index do |mail, index|
+    puts "mail #{index + 1}/#{numberOfEmails}: #{mail.subject} mit attachment:#{mail.attachments.size}"
+
+    # forward the email to the provided final email address
+    mail.to = finalEmailAddress
+    mail.deliver!
+  end
 end
 
 puts "Finished."
