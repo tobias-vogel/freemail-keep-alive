@@ -1,1 +1,7 @@
-email	password
+# this file contains all the credentials of your accounts
+# use hashes to comment out a line
+# empty lines are ignored
+
+#email	password
+
+

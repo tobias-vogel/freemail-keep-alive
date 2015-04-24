@@ -27,11 +27,20 @@ def lookupService(service)
 
   xml = File.open(filename).read
   xmldoc = REXML::Document.new xml
+
   popHostname = ""
   popPort = ""
   xmldoc.elements.each("/clientConfig/emailProvider/incomingServer[@type='pop3' and socketType/text() = 'SSL']") do |incomingServer|
     popHostname = incomingServer.get_elements("hostname").first.text
     popPort = incomingServer.get_elements("port").first.text
+    break
+  end
+
+  imapHostname = ""
+  imapPort = ""
+  xmldoc.elements.each("/clientConfig/emailProvider/incomingServer[@type='imap' and socketType/text() = 'SSL']") do |incomingServer|
+    imapHostname = incomingServer.get_elements("hostname").first.text
+    imapPort = incomingServer.get_elements("port").first.text
     break
   end
 
@@ -46,6 +55,8 @@ def lookupService(service)
   return {
     "popHostname" => popHostname,
     "popPort" => popPort,
+    "imapHostname" => imapHostname,
+    "imapPort" => imapPort,
     "smtpHostname" => smtpHostname,
     "smtpPort" => smtpPort
   }
@@ -78,11 +89,20 @@ ispSettingsCache = {}
 
 puts "Initialized."
 
+puts "Forwarding all new emails to #{finalEmailAddress}."
+
 # read list of accounts
-CSV.read("configuration/accounts.tsv", {:col_sep => "\t"})[1..-1].each do |row|
+CSV.read("configuration/accounts.tsv", {:col_sep => "\t"}).each do |row|
+  if row.size == 0 or row[0].start_with?("#")
+    # ignore empty or comment lines
+    next
+  end
+
+  puts
+
   email = row[0]
   password = row[1]
-  puts "Processing account ""#{email}""…"
+  puts "Logging into the email account of ""#{email}""…"
 
   service = email[/(?<=@).*/]
 
@@ -90,9 +110,16 @@ CSV.read("configuration/accounts.tsv", {:col_sep => "\t"})[1..-1].each do |row|
   settings = ispSettingsCache[service]
 
   Mail.defaults do
-    retriever_method :pop3,
-      :address    => settings["popHostname"],
-      :port       => settings["popPort"],
+#    retriever_method :pop3,
+#      :address    => settings["popHostname"],
+#      :port       => settings["popPort"],
+#      :user_name  => email,
+#      :password   => password,
+#      :enable_ssl => true
+
+    retriever_method :imap,
+      :address    => settings["imapHostname"],
+      :port       => settings["imapPort"],
       :user_name  => email,
       :password   => password,
       :enable_ssl => true
@@ -106,18 +133,20 @@ CSV.read("configuration/accounts.tsv", {:col_sep => "\t"})[1..-1].each do |row|
   end
 
 
-  puts "Logging into the email account of ""#{email}""…"
-  mails = Mail.all
+#  mails = Mail.all
+  mails = Mail.find(keys: ["NOT", "SEEN"])
   numberOfEmails = mails.size
-  puts "…finding #{mails.size} emails in total."
+  puts "…finding #{mails.size} new (unread) email(s) in total."
 
   mails.each_with_index do |mail, index|
-    puts "mail #{index + 1}/#{numberOfEmails}: #{mail.subject} mit attachment:#{mail.attachments.size}"
+    puts "Email #{index + 1}/#{numberOfEmails}: #{mail.subject}"
 
-    # forward the email to the provided final email address
+    puts "Forwarding this email to #{finalEmailAddress}…"
     mail.to = finalEmailAddress
     mail.deliver!
   end
 end
+
+puts
 
 puts "Finished."
