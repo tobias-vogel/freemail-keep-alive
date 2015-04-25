@@ -132,6 +132,7 @@ CSV.read("configuration/accounts.tsv", {:col_sep => "\t"}).each do |row|
       :enable_ssl => true
   end
 
+  puts "Using #{settings["imapHostname"]}:#{settings["imapPort"]} (IMAP) and #{settings["smtpHostname"]}:#{settings["smtpPort"]} (SMTP)"
 
 #  mails = Mail.all
   mails = Mail.find(keys: ["NOT", "SEEN"])
@@ -143,7 +144,19 @@ CSV.read("configuration/accounts.tsv", {:col_sep => "\t"}).each do |row|
 
     puts "Forwarding this email to #{finalEmailAddress}…"
     mail.to = finalEmailAddress
-    mail.deliver!
+    begin
+      mail.deliver!
+    rescue ArgumentError
+      puts "This email contained unfriendly characters the library cannot overcome."
+      originalSubject = mail.subject
+      replacementMail = Mail.new do
+        to finalEmailAddress
+        from email # some provider don't allow the original sender address here
+        subject originalSubject
+        body "Encoding problems, look up the email in the #{email} account by yourself."
+      end
+      replacementMail.deliver!
+    end
   end
 end
 
