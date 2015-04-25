@@ -151,7 +151,7 @@ CSV.read("configuration/accounts.tsv", {:col_sep => "\t"}).each do |row|
       originalSubject = mail.subject
       replacementMail = Mail.new do
         to finalEmailAddress
-        from email # some provider don't allow the original sender address here
+        from email # some providers don't allow the original sender address here
         subject originalSubject
         body "Encoding problems, look up the email in the #{email} account by yourself."
       end
